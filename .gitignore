@@ -1,0 +1,9 @@
+# Built and generated
+/build
+/inc/raylib
+/lib
+/rcsdk-*.*
+/vendor
+
+# raylib source backup
+/vendor.7z
