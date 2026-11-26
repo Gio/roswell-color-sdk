@@ -1,5 +1,5 @@
 /*
- * rc_dev.h - Roswell Color SDK, Phase 1 public API (display, audio, controls)
+ * rc_dev.h - Roswell Color SDK, public API (display, audio, controls)
  *
  * Roswell Color is a fantasy console with the display, audio and control limits
  * of the Game Boy Color. It runs at 60 Hz in a browser. It does not emulate the
@@ -55,14 +55,13 @@
  *         return 0;
  *     }
  *
- * To build a program, run this from WSL at the repository root:
- *
- *     make GAME=path/to/main.c
- *
- * That writes tmp/web/main.html, main.js and main.wasm. Open the page through
- * a local web server. A program that uses rc_init_headless() can also run with
- * `node tmp/web/main.js`. Programs are compiled as strict C99 (-std=c99), where
- * Emscripten's EM_ASM macro is unavailable. Use EM_JS instead if you need it.
+ * To build, run make at the project root. The project's Makefile lists its
+ * targets. It compiles src/ with Emscripten (emcc) and writes the page, its
+ * .js and its .wasm to build/. Open the page through a local web server
+ * (`make host`). A program that uses rc_init_headless() can also run under
+ * Node.js: `node build/<game>.js`. Programs are compiled as strict C99
+ * (-std=c99), where Emscripten's EM_ASM macro is unavailable. Use EM_JS
+ * instead if you need it.
  *
  * ---------------------------------------------------------------------------
  * 2. RULES THAT APPLY EVERYWHERE
@@ -613,7 +612,8 @@ void rc_input_feed_stop(void);
  * ---------------------------------------------------------------------------
  *
  * Art and music are converted ahead of time into C data and compiled in. The
- * conversion tools come in a later phase. These are the formats they target.
+ * project's tools/ export its art and audio as C (see tools/README.md). These
+ * are the formats the SDK reads.
  *
  * TILES: a const uint8_t array of 16 bytes per tile. Each of the 8 rows is two
  * bytes: first the low bits, then the high bits of its 8 pixels. Bit 7 is the
@@ -692,6 +692,9 @@ struct rc_music {
  *     #include "rc_dev.h"
  *
  * It is checked with #ifdef, so any definition counts, even `#define RC_DEBUG 0`.
+ * Passing -DRC_DEBUG to the compiler does the same for every file it compiles;
+ * the Makefile adds it when DEBUG is set (`make DEBUG=1`). Rebuild from clean
+ * when switching, so no object file is left built the other way.
  *
  * With RC_DEBUG:
  *   - Every SDK call with a limit is replaced by a checked version that prints a

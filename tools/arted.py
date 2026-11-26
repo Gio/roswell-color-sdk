@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """arted: a folder of game art (an art project) - the editor, and the export to Roswell Color C data.
 
-The art project is the source of the game's art: this edits, checks and exports it. This repo's is assets/,
-which tools/artx.js imported once from old-spook. Standard library only (tkinter for the editor).
+The art project is the source of the game's art: this edits, checks and exports it. By default it is the
+project's assets/ folder (the folder above tools/), and it exports to data/art/. Standard library only
+(tkinter for the editor).
 
     python tools/arted.py [art dir]                        the editor
-    python tools/arted.py export <art dir> [C out dir]     export to C       default C out dir: the project's
-    python tools/arted.py check <art dir>                  list the problems that would stop an export
-    python tools/arted.py new <art dir> [C out dir]        make a blank art project there
+    python tools/arted.py export [art dir] [C out dir]     export to C       default C out dir: the project's
+    python tools/arted.py check [art dir]                  list the problems that would stop an export
+    python tools/arted.py new [art dir] [C out dir]        make a blank art project there
 
-The editor opens the art project in the folder given; with none, a window asks for the folder (typed, or
-picked with Browse), starting from the current folder. A folder that does not exist yet is made, with a
-blank art project in it; File > Open folder switches to another. Each project keeps the folder it exports
-to in art.json ("export", relative to the project; a new one exports to src/art beside it). File > Export
+The art dir defaults to assets/. The editor opens the art project in that folder; a folder that does not
+exist yet is made, with a blank art project in it. File > Open folder switches to another (typed, or
+picked with Browse). Each project keeps the folder it exports to in art.json ("export", relative to the
+project; a new one exports to data/art beside it). File > Export
 folder changes it; a C out dir given to `export` is used for that run only. File > Save writes the
 project and File > Export C writes the C, the way `export` does.
 Help > Keys lists the mouse and keyboard controls. export and check need no display or Tk.
@@ -322,7 +323,7 @@ def has_obj(v):
 
 
 def fmt(v, ind=0):
-    """The layout tools/artx.js writes too: a container goes on one line when it holds no objects and fits
+    """The JSON layout: a container goes on one line when it holds no objects and fits
     in 160 columns, so a save rewrites only what changed."""
     c = dumps(v)
     if not isinstance(v, (list, dict)) or not v or (not has_obj(v) and ind + len(c) <= 160):
@@ -352,9 +353,13 @@ def write_text(path, text):
 
 
 # ================================================================ paths
+PROJECT_DIR = Path(__file__).resolve().parent.parent   # the game project: the folder above tools/
+DEFAULT_ART = PROJECT_DIR / 'assets'                   # the art project when no folder is given
+
+
 def default_export(root):
-    """Where a project in root exports to when its art.json does not say: src/art beside root."""
-    return Path(root).parent / 'src' / 'art'
+    """Where a project in root exports to when its art.json does not say: data/art beside root."""
+    return Path(root).parent / 'data' / 'art'
 
 
 def rel_path(path, start):
@@ -3636,7 +3641,7 @@ def run_new(assets, out=None):
 
 def run_editor(assets=None):
     """The editor on the art project in the folder assets (made, with a blank project, if there is none).
-    With no folder, a window asks for one."""
+    With no folder, the project's assets/."""
     if not hasattr(tk, 'Tk'):
         print('The editor needs Tk (tkinter), which this Python does not have.', file=sys.stderr)
         return 1
@@ -3649,10 +3654,7 @@ def run_editor(assets=None):
     root = tk.Tk()
     root.withdraw()
     if assets is None:
-        assets = FolderDialog(root, str(Path.cwd())).wait()
-        if assets is None:
-            root.destroy()
-            return 1
+        assets = DEFAULT_ART
     try:
         made = open_project(assets)[1]
     except (OSError, ValueError, KeyError, TypeError) as ex:
@@ -3673,13 +3675,12 @@ def run_editor(assets=None):
 def main(argv):
     args = argv[1:]
     cmd = args.pop(0) if args and args[0] in ('export', 'check', 'new') else 'edit'
-    if len(args) > (2 if cmd in ('export', 'new') else 1) or (cmd != 'edit' and not args) \
-            or any(a.startswith('-') for a in args):
+    if len(args) > (2 if cmd in ('export', 'new') else 1) or any(a.startswith('-') for a in args):
         print(__doc__.split('\n\n')[2], file=sys.stderr)
         return 2
     if cmd == 'edit':
         return run_editor(Path(args[0]) if args else None)
-    assets = Path(args[0])
+    assets = Path(args[0]) if args else DEFAULT_ART
     out = Path(args[1]) if len(args) > 1 else None
     if cmd == 'new':
         return run_new(assets, out)

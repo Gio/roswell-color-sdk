@@ -22,7 +22,7 @@
 #    lib/raylib             raylib web library (libraylib.web.a)
 #    vendor/raylib          raylib 6 source
 #    build/                 intermediate files
-#    rcsdk-x.y/             SDK output
+#    rcsdk-x.y,z/           SDK output
 #
 #
 #  Calling 'make' checks first for 'lib/raylib/libraylib.web.a', and, if not
@@ -32,10 +32,11 @@
 
 ##### §1 Setup #####
 ### §1.1 Names
-SDK        = rcsdk
+NAME       = rcsdk
 VERSION    = 0
 SUBVERSION = 1
-NAME       = $(SDK)-$(VERSION).$(SUBVERSION)
+MINVERSION = 2
+DIST_NAME  = $(NAME)-v$(VERSION).$(SUBVERSION).$(MINVERSION)
 
 # Raylib
 RAYLIB_VERSION = 6.0
@@ -61,7 +62,7 @@ rayINC  = $(incDir)/raylib
 rayLIB  = $(libDir)/raylib
 raySRC  = $(venDir)/raylib
 rayTMP  = $(tmpDir)/raylib
-sdkDir  = $(NAME)
+sdkDir  = $(DIST_NAME)
 sdkTool = $(sdkDir)/tools
 
 ### §1.4 Vendor
@@ -137,12 +138,13 @@ release: rcsdk raylib tools
 » cp $(RAYLIB_LIB) $(sdkDir)/$(rayLIB)
 » cp $(incDir)/rc_dev.h $(sdkDir)/$(incDir)
 » cp $(RAYLIB_HEADER) $(sdkDir)/$(rayINC)
+» cp LICENSE $(sdkDir)
 
 # Distribution
 .PHONY: dist
 dist: release
-» $(TAR) -cf $(NAME).tar $(sdkDir)
-» $(ZIP) -kf $(NAME).tar
+» $(TAR) -cf $(DIST_NAME).tar $(sdkDir)
+» $(ZIP) -kf $(DIST_NAME).tar
 
 ### §3.3 Cleaning
 # Easy clean
@@ -153,4 +155,4 @@ clean:
 # Full clean (even raylib)
 .PHONY: distclean
 distclean:
-» rm -rf $(tmpDir) $(libDir) $(rayINC) $(venDir) $(sdkDir) $(NAME).tar $(NAME).tar.*
+» rm -rf $(tmpDir) $(libDir) $(rayINC) $(venDir) $(sdkDir) $(DIST_NAME).tar $(DIST_NAME).tar.*

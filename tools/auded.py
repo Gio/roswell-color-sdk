@@ -2,22 +2,24 @@
 """auded: a folder of game sound (a sound project) - the editor, and the export to Roswell Color C data.
 
 The sound project is the source of the game's music and sound effects: this edits, plays, checks and exports
-it. This repo's is assets/sound, which tools/soundx.py imported once from old-spook. Standard library only
+it. By default it is the project's assets/ folder (the folder above tools/, shared with the art project,
+whose files have other names), and it exports to data/music/ and data/sounds/. Standard library only
 (tkinter for the editor). It plays what it shows the way the console does: the preview is a copy of the
 console's 4 channels, sample for sample.
 
     python tools/auded.py [sound dir]                      the editor
-    python tools/auded.py export <sound dir> [C out dir]   export to C       default C out dir: the project's
-    python tools/auded.py check <sound dir>                list the problems that would stop an export
-    python tools/auded.py new <sound dir> [C out dir]      make a blank sound project there
-    python tools/auded.py wav <sound dir> <tune> <file>    write a song or sound effect to a .wav file
+    python tools/auded.py export [sound dir] [C out dir]   export to C       default C out dir: the project's
+    python tools/auded.py check [sound dir]                list the problems that would stop an export
+    python tools/auded.py new [sound dir] [C out dir]      make a blank sound project there
+    python tools/auded.py wav [sound dir] <tune> <file>    write a song or sound effect to a .wav file
 
-The editor opens the sound project in the folder given; with none, a window asks for the folder (typed, or
-picked with Browse), starting from the current folder. A folder that does not exist yet is made, with a
-blank sound project in it; File > Open folder switches to another. Each project keeps the folder it exports
-to in sound.json ("export", relative to the project; a new one exports to src/sound beside it, or beside
-the art project it sits in). File > Export folder changes it; a C out dir given to `export` is used for
-that run only. File > Save writes the project and File > Export C writes the C, the way `export` does.
+The sound dir defaults to assets/. The editor opens the sound project in that folder; a folder that does
+not exist yet is made, with a blank sound project in it. File > Open folder switches to another (typed, or
+picked with Browse). Each project keeps the folder it exports to in sound.json ("export", relative to the
+project; a new one exports to data beside it). The export writes two folders in it: music/ (the songs)
+and sounds/ (the sound effects, the waves, the driver and sound.h). File > Export folder changes it; a C
+out dir given to `export` is used for that run only (music/ and sounds/ go in it the same way).
+File > Save writes the project and File > Export C writes the C, the way `export` does.
 Help > Keys lists the controls. export, check and wav need no display or Tk.
 
 The layout of a sound project (all JSON):
@@ -105,12 +107,15 @@ def cid(s):
 
 
 # ================================================================ paths
+PROJECT_DIR = Path(__file__).resolve().parent.parent   # the game project: the folder above tools/
+DEFAULT_SOUND = PROJECT_DIR / 'assets'                 # the sound project when no folder is given
+MUSIC_DIR, SOUNDS_DIR = 'music', 'sounds'              # what the export writes in its folder
+
+
 def default_export(root):
-    """Where a project in root exports to when its sound.json does not say: src/sound beside it, or beside
-    the art project it sits in (assets/sound -> src/sound)."""
-    root = Path(root)
-    top = root.parent.parent if (root.parent / 'art.json').exists() else root.parent
-    return top / 'src' / 'sound'
+    """Where a project in root exports to when its sound.json does not say: data beside root, so the C goes
+    to data/music and data/sounds."""
+    return Path(root).parent / 'data'
 
 
 def rel_path(path, start):
@@ -881,7 +886,9 @@ def tune_c(proj, kind, t):
 
 
 def export_files(proj, src='sound'):
-    """{file name: text} of the export."""
+    """{file path in the export folder: text} of the export. The songs go in music/, the rest in sounds/;
+    the songs include sound.h from there."""
+    S, M = SOUNDS_DIR + '/', MUSIC_DIR + '/'
     files = {}
     h = [SOUND_H_TOP % (GENERATED, src)]
     h.append('/* Waves: 32 samples of 4 bits, high nibble first. */')
@@ -896,17 +903,18 @@ def export_files(proj, src='sound'):
             word, 'SND_%s_COUNT' % word if tunes else '1', '' if tunes else '   /* none yet: { 0 } */'))
     h.append(DRIVER_H)
     h.append('#endif')
-    files['sound.h'] = '\n'.join(h) + '\n'
+    files[S + 'sound.h'] = '\n'.join(h) + '\n'
 
     w = ['/* %s from %s/waves.json - do not edit. */' % (GENERATED, src), '#include "sound.h"', '']
     for x in proj.waves:
         b = wave_bytes(wave_samples(x['samples']))
         w.append('const uint8_t SND_WAVE_%s[RC_WAVE_BYTES] = { %s };' % (cid(x['name']), ', '.join(hx(v) for v in b)))
-    files['sound_waves.c'] = '\n'.join(w) + '\n'
+    files[S + 'sound_waves.c'] = '\n'.join(w) + '\n'
 
-    for kind, tunes, word, fname in (('song', proj.songs, 'SONG', 'sound_songs.c'), ('sfx', proj.sfx, 'SFX', 'sound_sfx.c')):
+    for kind, tunes, word, fname, inc in (('song', proj.songs, 'SONG', M + 'sound_songs.c', '../%s/sound.h' % SOUNDS_DIR),
+                                          ('sfx', proj.sfx, 'SFX', S + 'sound_sfx.c', 'sound.h')):
         s = ['/* %s from %s/%s - do not edit. */' % (GENERATED, src, 'songs' if kind == 'song' else 'sfx'),
-             '#include "sound.h"', '']
+             '#include "%s"' % inc, '']
         for t in tunes:
             s.append(tune_c(proj, kind, t))
         if tunes:
@@ -916,7 +924,7 @@ def export_files(proj, src='sound'):
         else:
             s.append('const rc_music *const SND_%sS[1] = { 0 };' % word)
         files[fname] = '\n'.join(s) + '\n'
-    files['sound_driver.c'] = DRIVER_C % GENERATED
+    files[S + 'sound_driver.c'] = DRIVER_C % GENERATED
     return files
 
 
@@ -930,11 +938,13 @@ def export(proj, out=None):
     files = export_files(proj, source_name(proj.root, out))
     written = [n for n, text in files.items() if write_text(out / n, text)]
     removed = []
-    for f in sorted(out.glob('*.[ch]')):
-        top = f.read_text(encoding="utf-8", errors="replace")[:300]
-        if f.name not in files and any(m in top for m in (GENERATED,) + OLD_GENERATED):
-            f.unlink()
-            removed.append(f.name)
+    for sub in (MUSIC_DIR, SOUNDS_DIR):
+        for f in sorted((out / sub).glob('*.[ch]')):
+            n = '%s/%s' % (sub, f.name)
+            top = f.read_text(encoding="utf-8", errors="replace")[:300]
+            if n not in files and any(m in top for m in (GENERATED,) + OLD_GENERATED):
+                f.unlink()
+                removed.append(n)
     return [], written, removed
 
 
@@ -2914,7 +2924,7 @@ class App:
         self.status(what)
 
     def show_export_dir(self):
-        self.file_menu.entryconfigure(3, label='Export C to %s' % self.proj.settings['export'])
+        self.file_menu.entryconfigure(3, label='Export C to %s/{%s,%s}' % (self.proj.settings['export'], MUSIC_DIR, SOUNDS_DIR))
 
     def set_export_dir(self, path):
         """Makes the project export to path (kept in sound.json, relative to the project)."""
@@ -2928,7 +2938,7 @@ class App:
     def choose_export_dir(self):
         from tkinter import filedialog
         d = self.proj.export_dir()
-        path = filedialog.askdirectory(title='Where Export C writes the sound', mustexist=False,
+        path = filedialog.askdirectory(title='Where Export C writes %s/ and %s/' % (MUSIC_DIR, SOUNDS_DIR), mustexist=False,
                                        initialdir=str(d if d.exists() else self.proj.root))
         if path:
             self.set_export_dir(path)
@@ -3085,13 +3095,15 @@ def main(argv):
     args = argv[1:]
     cmd = args.pop(0) if args and args[0] in ('export', 'check', 'new', 'wav') else 'edit'
     most = {'export': 2, 'new': 2, 'wav': 3}.get(cmd, 1)
-    least = {'edit': 0, 'wav': 3}.get(cmd, 1)
+    least = {'wav': 2}.get(cmd, 0)
     if not least <= len(args) <= most or any(a.startswith('-') for a in args):
         print(__doc__.split('\n\n')[2], file=sys.stderr)
         return 2
     if cmd == 'edit':
         return run_editor(Path(args[0]) if args else None)
-    folder = Path(args[0])
+    if cmd == 'wav' and len(args) == 2:
+        args.insert(0, str(DEFAULT_SOUND))
+    folder = Path(args[0]) if args else DEFAULT_SOUND
     if cmd == 'new':
         return run_new(folder, Path(args[1]) if len(args) > 1 else None)
     if not (folder / 'sound.json').exists():
@@ -3107,7 +3119,7 @@ def main(argv):
 
 def run_editor(folder=None):
     """The editor on the sound project in folder (made, with a blank project, if there is none). With no
-    folder, a window asks for one."""
+    folder, the project's assets/."""
     if not hasattr(tk, 'Tk'):
         print('The editor needs Tk (tkinter), which this Python does not have.', file=sys.stderr)
         return 1
@@ -3120,10 +3132,7 @@ def run_editor(folder=None):
     root = tk.Tk()
     root.withdraw()
     if folder is None:
-        folder = FolderDialog(root, str(Path.cwd())).wait()
-        if folder is None:
-            root.destroy()
-            return 1
+        folder = DEFAULT_SOUND
     try:
         made = open_project(folder)[1]
     except (OSError, ValueError, KeyError, TypeError) as ex:
